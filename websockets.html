@@ -3,6 +3,7 @@
   <head>
     <link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
     <script type="text/javascript" src="js/angular.min.js"></script>
+    <script type="text/javascript" src="js/underscore.js"></script>
     <script type="text/javascript" src="js/protocol.js"></script>
     <script type="text/javascript" src="js/websockets.js"></script>
   </head>
@@ -39,9 +40,9 @@
       <div ng-show="connected">
         <div ng-repeat="bufferline in buffer">
           <p>
-            <div ng-repeat="part in bufferline">
-              <span class="text">{{ part.text }}</span>
-            </div>
+            <span ng-repeat="part in bufferline" class="text">
+              {{ part.text }}
+            </span>
           </p>
         </div>
               <form ng-submit="sendMessage()">
