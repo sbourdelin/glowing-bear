@@ -3,6 +3,7 @@
   <head>
     <link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
     <script type="text/javascript" src="js/angular.min.js"></script>
+    <script type="text/javascript" src="js/underscore.js"></script>
     <script type="text/javascript" src="js/protocol.js"></script>
     <script type="text/javascript" src="js/websockets.js"></script>
   </head>
@@ -37,8 +38,19 @@
         </form>
       </div>
       <div ng-show="connected">
-        <div ng-repeat="bufferline in buffer">
-          {{ bufferline }}
+
+        <div ng-repeat="(key, content) in buffers">
+          <a ng-click="setActiveBuffer(key)">{{ content.full_name }}</a>
+        </div>
+        <div ng-repeat="bufferline in activeBuffer.lines">
+
+          <span ng-repeat="part in bufferline.message" class="text">
+            {{ part.text }}
+          </span>
+          <div ng-bind-html-unsafe="bufferline.metadata"></div>
+
+
+          <br>
         </div>
               <form ng-submit="sendMessage()">
               <input type="text" ng-model="command"></input>
