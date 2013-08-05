@@ -99,133 +99,142 @@ weechat.factory('colors', [function($scope) {
         parts: ['', 'black', 'dark gray', 'dark red', 'light red', 'dark green', 'light green', 'brown', 'yellow', 'dark blue', 'light blue', 'dark magenta', 'light magenta', 'dark cyan', 'light cyan', 'gray', 'white']
     }
 
-
-
-
 }]);
 
 
-weechat.factory('connection', ['$rootScope', 'colors', function($scope, colors) {
-        protocol = new Protocol();
-        var websocket = null;
+weechat.factory('handlers', ['$rootScope', 'colors', function($rootScope, colors) {
 
-        var doSend = function(message) {
+    var handleBufferLineAdded = function(message) {
+        var buffer_line = {}
+        var prefix = colors.parse(message['objects'][0]['content'][0]['prefix']);
+        var text = colors.parse(message['objects'][0]['content'][0]['message']);
+        var buffer = message['objects'][0]['content'][0]['buffer'];
+        var message = _.union(prefix, text);
+        buffer_line['message'] = message;
+        buffer_line['metadata'] = findMetaData(text[0]['text']);
+        $rootScope.buffers[buffer]['lines'].push(buffer_line);
+    }
 
-          msgs = message.replace(/[\r\n]+$/g, "").split("\n");
-          for (var i = 0; i < msgs.length; i++) {
-            console.log('=' + msgs[i] + '=');
-            $scope.commands.push("SENT: " + msgs[i]);
-          }
-          websocket.send(message);
+    var handleBufferOpened = function(message) {
+        var fullName = message['objects'][0]['content'][0]['full_name']
+        var buffer = message['objects'][0]['content'][0]['pointers'][0]
+        $rootScope.buffers[buffer] = { 'lines':[], 'full_name':fullName }
+    }
+
+    /*
+     * Handle answers to (bufinfo) messages
+     *
+     * (bufinfo) messages are specified by this client. It is the first
+     * message that is sent to the relay after connection.
+     */
+    var handleBufferInfo = function(message) {
+        // buffer info from message
+        var bufferInfos = message['objects'][0]['content'];
+        // buffers objects
+        var buffers = {};
+        for (var i = 0; i < bufferInfos.length ; i++) {
+            var bufferInfo = bufferInfos[i];
+            var pointer = bufferInfo['pointers'][0];
+
+            bufferInfo['lines'] = [];
+            buffers[pointer] = bufferInfo
         }
-        var connect = function (hostport, proto, password) {
-            websocket = new WebSocket("ws://" + hostport + "/weechat");
-            websocket.binaryType = "arraybuffer"
+        $rootScope.buffers = buffers;
+    }
+   
+    var handleEvent = function(event) {
+        if (_.has(eventHandlers, event['id'])) {
+            eventHandlers[event['id']](event);
+        }
 
-            websocket.onopen = function (evt) {
-              if (proto == "weechat") {
+    }
+
+    var findMetaData = function(message) {
+        if (message.indexOf('youtube.com') != -1) {
+            var index = message.indexOf("?v=");
+            var token = message.substr(index+3);
+            return '<iframe width="560" height="315" src="http://www.youtube.com/embed/' + token + '" frameborder="0" allowfullscreen></iframe>'
+        }
+        return null;
+
+    }
+
+    var eventHandlers = {
+        bufinfo: handleBufferInfo,
+        _buffer_line_added: handleBufferLineAdded,
+        _buffer_opened: handleBufferOpened
+    }
+
+    return {
+        handleEvent: handleEvent
+
+    }
+
+}]);
+
+weechat.factory('connection', ['$rootScope', '$log', 'handlers', 'colors', function($rootScope, $log, handlers, colors) {
+    protocol = new Protocol();
+    var websocket = null;
+
+
+    // Sanitizes messages to be sent to the weechat relay    
+    var doSend = function(message) {
+        msgs = message.replace(/[\r\n]+$/g, "").split("\n");
+        for (var i = 0; i < msgs.length; i++) {
+            $log.log('=' + msgs[i] + '=');
+            $rootScope.commands.push("SENT: " + msgs[i]);
+        }
+        websocket.send(message);
+    }
+    
+    // Takes care of the connection and websocket hooks
+    var connect = function (hostport, proto, password) {
+        websocket = new WebSocket("ws://" + hostport + "/weechat");
+        websocket.binaryType = "arraybuffer"
+
+        websocket.onopen = function (evt) {
+            // FIXME: does password need to be sent only if protocol is not weechat?
+            if (proto == "weechat") {
                 doSend("init compression=off\nversion\n");
-                doSend("hdata buffer:gui_buffers(*) full_name\n");
+                doSend("(bufinfo) hdata buffer:gui_buffers(*) full_name\n");
                 doSend("sync\n");
-              } else {
-                doSend("PASS " + password + "\r\nNICK test\r\nUSER test 0 * :test\r\n");
-              }
-              $scope.connected = true;
-              $scope.$apply();
-            }
-
-            websocket.onclose = function (evt) {
-              console.log("disconnected", "Disconnected");
-              $scope.connected = false;
-            }
-
-            websocket.onmessage = function (evt) {
-	      protocol.setData(evt.data);
-	      message = protocol.parse()
-              console.log(message);
-              $scope.commands.push("RECV: " + evt.data + " TYPE:" + evt.type) ;
-              parseMessage(message);
-	      data = evt.data;
-              $scope.$apply();
-            }
-
-
-            websocket.onerror = function (evt) {
-              console.log("error", "ERROR: " + evt.data);
-            }
-
-            this.websocket = websocket;
-        }
-
-        var parseMessage = function(message) {
-            
-                
-
-
-            if (!message['id']) {
-                // should only be in case of hda objects
-                parseObjects(message['objects']);
             } else {
-                types[message['id']](message);
+                doSend("PASS " + password + "\r\nNICK test\r\nUSER test 0 * :test\r\n");
             }
-        };
-    
-    
-        var parseObjects = function(objects) {
-
-            for (var i = 0; i < objects.length ; i++) {
-                console.log('type', objects[i]['type']);
-                if (objects[i]['type'] == 'hda') {
-                    parseHdaObject(objects[i]);
-                }
-            }
+            $log.info("Connected to relay");
+            $rootScope.connected = true;
+            $rootScope.$apply();
         }
 
-        var parseHdaObject = function(hdaObject) {
-            console.log('parse hda', hdaObject['content'], hdaObject['content'].length);
-            buffers = {};
-            for (var i = 0; i < hdaObject['content'].length; i++) {
-                content = hdaObject['content'][i];
-                content['lines'] = [];
-                console.log('content', content);
-                var pointer = content['pointers'][0];
-                buffers[pointer] = content;
-            }
-
-            $scope.buffers = buffers;
-        }
-    
-
-        var handleBufferLineAdded = function(message) {
-
-            var prefix = colors.parse(message['objects'][0]['content'][0]['prefix']);
-            var text = colors.parse(message['objects'][0]['content'][0]['message']);
-            var buffer = message['objects'][0]['content'][0]['buffer'];
-            var buffer_line = _.union(prefix, text);
-            console.log('BUFFER: ', $scope.buffers[buffer]);
-            $scope.buffers[buffer]['lines'].push(buffer_line);
+        websocket.onclose = function (evt) {
+            $log.info("Disconnected from relay");
+            $rootScope.connected = false;
+            $rootScope.$apply();
         }
 
-        var handleBufferOpened = function(message) {
-            var fullName = message['objects'][0]['content'][0]['full_name']
-            var buffer = message['objects'][0]['content'][0]['pointers'][0]
-            $scope.buffers[buffer] = { 'lines':[], 'full_name':fullName }
-            console.log($scope.buffers);
-        }
-        var sendMessage = function(message) {
-            message = "input " + $scope.activeBuffer['full_name'] + " " + message + "\n"
-            doSend(message);
+        websocket.onmessage = function (evt) {
+	    message = protocol.parse(evt.data)
+            handlers.handleEvent(message);
+            $rootScope.commands.push("RECV: " + evt.data + " TYPE:" + evt.type) ;
+            $rootScope.$apply();
         }
 
-        var types = {
-            _buffer_line_added: handleBufferLineAdded,
-            _buffer_opened: handleBufferOpened
+        websocket.onerror = function (evt) {
+            $log.error("Relay error " + evt.data);
         }
 
-        return {
-            connect: connect,
-            sendMessage: sendMessage
-        }
+        this.websocket = websocket;
+    }
+
+    var sendMessage = function(message) {
+        message = "input " + $rootScope.activeBuffer['full_name'] + " " + message + "\n"
+        doSend(message);
+    }
+
+    return {
+        connect: connect,
+        sendMessage: sendMessage
+    }
 }]);
 
 weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', function ($rootScope, $scope, connection) {
@@ -239,7 +248,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', functio
     $scope.password = ""
 
     $scope.setActiveBuffer = function(key) {
-        console.log('change buffer');
         $rootScope.activeBuffer = $rootScope.buffers[key];
     };
 
@@ -251,5 +259,5 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', functio
     $scope.connect = function() {
         connection.connect($scope.hostport, $scope.proto, $scope.password);
     }
-    }]
-);
+}]
+                  );

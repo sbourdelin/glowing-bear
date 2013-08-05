@@ -1,5 +1,6 @@
 var Protocol = function() {
         var self = this;
+
         var getInfo = function() {
             var info = {};
             info.key = getString();
@@ -52,7 +53,7 @@ var Protocol = function() {
             for (var c = 0; c < uia.length; c++) {
                 _str[c] = String.fromCharCode(uia[c]);
             }
-            return _str.join("");
+            return decodeURIComponent(escape(_str.join("")));
         };
 
         var getInt = function() {
@@ -116,8 +117,8 @@ var Protocol = function() {
             }
         }
 
-        self.parse = function() {
-
+        self.parse = function(data) {
+            self.setData(data);
             var header = getHeader();
             var id = getId();
             var objects = [];
@@ -126,8 +127,6 @@ var Protocol = function() {
                 objects.push(object);
                 object = getObject();
             }
-	    console.log("Received message");
-	    console.log(header, id, objects);
             return {
                 header: header,
                 id: id,
