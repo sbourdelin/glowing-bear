@@ -7,7 +7,7 @@ git checkout $REV -- .
 
 echo "Updating version..."
 sed -i "/<\/body>/i\
-    <p>Version <a href=\"https:\/\/github.com\/cormier\/glowing-bear\/commit\/$REV\">$REV<\/a><\\p>
+    <p>Version <a target=\"_blank\" href=\"https:\/\/github.com\/cormier\/glowing-bear\/commit\/$REV\">$REV<\/a><\\p>
 
 " index.html
 
