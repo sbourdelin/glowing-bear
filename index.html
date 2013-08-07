@@ -39,18 +39,29 @@
       </div>
       <div ng-show="connected">
 
-        <div ng-repeat="(key, content) in buffers">
+        <span class="label" ng-class="{'label-success': content.notification }" ng-repeat="(key, content) in buffers">
           <a ng-click="setActiveBuffer(key)">{{ content.full_name }}</a>
-        </div>
+        </span>
         <div ng-repeat="bufferline in activeBuffer.lines">
 
           <span ng-repeat="part in bufferline.message" class="text">
             {{ part.text }}
           </span>
-          <div ng-bind-html-unsafe="bufferline.metadata"></div>
+
+          <div ng-repeat="metadata in bufferline.metadata">
+            <div ng-show="metadata.visible">
+              <a ng-click="metadata.visible = false">Hide additional content</a>
+              <div ng-bind-html-unsafe="metadata.content"></div>
+
+            </div>
+            <div ng-hide="metadata.visible">
+              <a ng-click="metadata.visible = true">Show additional content</a>
+            </div>
+            
+          </div>
 
 
-          <br>
+
         </div>
               <form ng-submit="sendMessage()">
               <input type="text" ng-model="command"></input>
@@ -58,6 +69,6 @@
               </form>
       </div>
     </div>
-<p>Version <a target="_blank" href="https://github.com/cormier/glowing-bear/commit/5719dff">5719dff</a><p>
+<p>Version <a target="_blank" href="https://github.com/cormier/glowing-bear/commit/89614a3">89614a3</a><p>
   </body>
 </html>

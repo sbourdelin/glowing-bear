@@ -101,8 +101,54 @@ weechat.factory('colors', [function($scope) {
 
 }]);
 
+weechat.factory('pluginManager', ['youtubePlugin', function(youtubePlugin) {
 
-weechat.factory('handlers', ['$rootScope', 'colors', function($rootScope, colors) {
+    var plugins = [youtubePlugin]
+
+    var hookPlugin = function(plugin) {
+        plugins.push(plugin);
+    }
+
+    var contentForMessage = function(message) {
+        
+        console.log('Message: ', message);
+        var content = [];
+        for (var i = 0; i < plugins.length; i++) {
+            var pluginContent = plugins[i].contentForMessage(message);
+            if (pluginContent) {
+                var pluginContent = {'visible': false, 'content': pluginContent }
+                content.push(pluginContent);
+            }
+        }
+        
+        console.log('Content: ', content);
+        return content;
+    }
+
+    return {
+        hookPlugin: hookPlugin,
+        contentForMessage: contentForMessage
+    }
+
+}]);
+
+weechat.factory('youtubePlugin', [function() {
+    var contentForMessage = function(message) {
+        if (message.indexOf('youtube.com') != -1) {
+            var index = message.indexOf("?v=");
+            var token = message.substr(index+3);
+            return '<iframe width="560" height="315" src="http://www.youtube.com/embed/' + token + '" frameborder="0" allowfullscreen></iframe>'
+        }
+        return null;
+    }
+
+    return {
+        contentForMessage: contentForMessage
+    }
+}]);
+
+
+weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($rootScope, colors, pluginManager) {
 
     var handleBufferLineAdded = function(message) {
         var buffer_line = {}
@@ -111,14 +157,35 @@ weechat.factory('handlers', ['$rootScope', 'colors', function($rootScope, colors
         var buffer = message['objects'][0]['content'][0]['buffer'];
         var message = _.union(prefix, text);
         buffer_line['message'] = message;
-        buffer_line['metadata'] = findMetaData(text[0]['text']);
+
+        if (!_isActiveBuffer(buffer)) {
+            $rootScope.buffers[buffer]['notification'] = true;
+        }
+
+        var additionalContent = pluginManager.contentForMessage(text[0]['text']);
+        if (additionalContent) {
+            buffer_line['metadata'] = additionalContent;
+        }
+
         $rootScope.buffers[buffer]['lines'].push(buffer_line);
+    }
+
+    /*
+     * Returns whether or not this buffer is the active buffer
+     */
+    var _isActiveBuffer = function(buffer) {
+      if ($rootScope.activeBuffer['id'] == buffer) {
+          return true;
+      } else {
+          return false;
+      }
     }
 
     var handleBufferOpened = function(message) {
         var fullName = message['objects'][0]['content'][0]['full_name']
         var buffer = message['objects'][0]['content'][0]['pointers'][0]
-        $rootScope.buffers[buffer] = { 'lines':[], 'full_name':fullName }
+        $rootScope.buffers[buffer] = { 'id': buffer, 'lines':[], 'full_name':fullName }
+        
     }
 
     /*
@@ -135,7 +202,7 @@ weechat.factory('handlers', ['$rootScope', 'colors', function($rootScope, colors
         for (var i = 0; i < bufferInfos.length ; i++) {
             var bufferInfo = bufferInfos[i];
             var pointer = bufferInfo['pointers'][0];
-
+            bufferInfo['id'] = pointer;
             bufferInfo['lines'] = [];
             buffers[pointer] = bufferInfo
         }
@@ -156,7 +223,6 @@ weechat.factory('handlers', ['$rootScope', 'colors', function($rootScope, colors
             return '<iframe width="560" height="315" src="http://www.youtube.com/embed/' + token + '" frameborder="0" allowfullscreen></iframe>'
         }
         return null;
-
     }
 
     var eventHandlers = {
@@ -251,6 +317,7 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', functio
     $scope.password = ""
 
     $scope.setActiveBuffer = function(key) {
+        $rootScope.buffers[key]['notification'] = false;
         $rootScope.activeBuffer = $rootScope.buffers[key];
     };
 
