@@ -101,9 +101,9 @@ weechat.factory('colors', [function($scope) {
 
 }]);
 
-weechat.factory('pluginManager', ['youtubePlugin', function(youtubePlugin) {
+weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', function(youtubePlugin, urlPlugin) {
 
-    var plugins = [youtubePlugin]
+    var plugins = [youtubePlugin, urlPlugin]
 
     var hookPlugin = function(plugin) {
         plugins.push(plugin);
@@ -147,8 +147,30 @@ weechat.factory('youtubePlugin', [function() {
     }
 }]);
 
+weechat.factory('urlPlugin', [function() {
+    var contentForMessage = function(message) {
+        var prefix = 'http://';
+        var linkIndex = message.indexOf(prefix);
+        if (linkIndex != -1) {
+            var token = message.substr(linkIndex);
+            return '<a href="' + token + '">' + token + '</a>';
+        }
+        return null;
+    }
+
+    return {
+        contentForMessage: contentForMessage
+    }
+}]);
+
+
 
 weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($rootScope, colors, pluginManager) {
+
+    var handleBufferClosing = function(message) {
+        var buffer_pointer = message['objects'][0]['content'][0]['pointers'][0];
+        $rootScope.closeBuffer(buffer_pointer);
+    }
 
     var handleBufferLineAdded = function(message) {
         var buffer_line = {}
@@ -163,6 +185,7 @@ weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($
         }
 
         var additionalContent = pluginManager.contentForMessage(text[0]['text']);
+
         if (additionalContent) {
             buffer_line['metadata'] = additionalContent;
         }
@@ -205,6 +228,10 @@ weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($
             bufferInfo['id'] = pointer;
             bufferInfo['lines'] = [];
             buffers[pointer] = bufferInfo
+            if (i == 0) {
+                // first buffer is active buffer by default
+                $rootScope.activeBuffer = buffers[pointer];
+            }
         }
         $rootScope.buffers = buffers;
     }
@@ -227,6 +254,7 @@ weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($
 
     var eventHandlers = {
         bufinfo: handleBufferInfo,
+        _buffer_closing: handleBufferClosing, 
         _buffer_line_added: handleBufferLineAdded,
         _buffer_opened: handleBufferOpened
     }
@@ -315,6 +343,13 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', functio
     $scope.hostport = "localhost:9001"
     $scope.proto = "weechat"
     $scope.password = ""
+
+
+    $rootScope.closeBuffer = function(buffer_pointer) {
+        delete($rootScope.buffers[buffer_pointer]);
+        var first_buffer = _.keys($rootScope.buffers)[0];
+        $scope.setActiveBuffer(first_buffer);
+    }
 
     $scope.setActiveBuffer = function(key) {
         $rootScope.buffers[key]['notification'] = false;
