@@ -24,6 +24,13 @@ weechat.factory('colors', [function($scope) {
         return c;
     }
 
+    function prepareCss(color) {
+        /*
+         * Translates a weechat color string to CSS
+         */
+        return'color-' + color.replace(' ', '-');
+    }
+
     var prefixes = {
         '\x19': function() {
             if (part.match(/^F/)) {
@@ -95,15 +102,16 @@ weechat.factory('colors', [function($scope) {
         
         setAttrs: setAttrs,
         getColor: getColor,
+        prepareCss: prepareCss,
         parse: parse,
         parts: ['', 'black', 'dark gray', 'dark red', 'light red', 'dark green', 'light green', 'brown', 'yellow', 'dark blue', 'light blue', 'dark magenta', 'light magenta', 'dark cyan', 'light cyan', 'gray', 'white']
     }
 
 }]);
 
-weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', function(youtubePlugin, urlPlugin) {
+weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', 'imagePlugin', function(youtubePlugin, urlPlugin, imagePlugin) {
 
-    var plugins = [youtubePlugin, urlPlugin]
+    var plugins = [youtubePlugin, urlPlugin, imagePlugin]
 
     var hookPlugin = function(plugin) {
         plugins.push(plugin);
@@ -118,6 +126,10 @@ weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', function(youtube
             if (pluginContent) {
                 var pluginContent = {'visible': false, 'content': pluginContent }
                 content.push(pluginContent);
+
+                if (plugins[i].exclusive) {
+                    break;
+                }
             }
         }
         
@@ -133,6 +145,7 @@ weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', function(youtube
 }]);
 
 weechat.factory('youtubePlugin', [function() {
+
     var contentForMessage = function(message) {
         if (message.indexOf('youtube.com') != -1) {
             var index = message.indexOf("?v=");
@@ -143,17 +156,34 @@ weechat.factory('youtubePlugin', [function() {
     }
 
     return {
-        contentForMessage: contentForMessage
+        contentForMessage: contentForMessage,
+        exclusive: true
     }
+
 }]);
 
 weechat.factory('urlPlugin', [function() {
     var contentForMessage = function(message) {
-        var prefix = 'http://';
-        var linkIndex = message.indexOf(prefix);
-        if (linkIndex != -1) {
-            var token = message.substr(linkIndex);
-            return '<a href="' + token + '">' + token + '</a>';
+        var urlPattern = /(http|ftp|https):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/;
+        var url = message.match(urlPattern);
+        if (url) {
+            return '<a href="' + url[0] + '">' + message + '</a>';
+        }
+        return null;
+    }
+
+    return {
+        contentForMessage: contentForMessage,
+        exclusive: false
+    }
+}]);
+
+weechat.factory('imagePlugin', [function() {
+    var contentForMessage = function(message) {
+		var urls = message.match(/https?:\/\/[^\s]*\.(jpg|png|gif)\b/)
+		if (urls != null) {
+			var url = urls[0]; /* Actually parse one url per message */
+			return '<img src="' + url + '" height="300">';
         }
         return null;
     }
@@ -162,8 +192,6 @@ weechat.factory('urlPlugin', [function() {
         contentForMessage: contentForMessage
     }
 }]);
-
-
 
 weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($rootScope, colors, pluginManager) {
 
@@ -178,6 +206,12 @@ weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($
         var text = colors.parse(message['objects'][0]['content'][0]['message']);
         var buffer = message['objects'][0]['content'][0]['buffer'];
         var message = _.union(prefix, text);
+        message =_.map(message, function(message) {
+            if ('fg' in message) {
+                message['fg'] = colors.prepareCss(message['fg']);
+            }
+            return message;
+        });
         buffer_line['message'] = message;
 
         if (!_isActiveBuffer(buffer)) {
@@ -317,6 +351,9 @@ weechat.factory('connection', ['$rootScope', '$log', 'handlers', 'colors', funct
         }
 
         websocket.onerror = function (evt) {
+            if (evt.type == "error" && websocket.readyState == 0) {
+                $rootScope.errorMessage = true;
+            }
             $log.error("Relay error " + evt.data);
         }
 

@@ -3,6 +3,7 @@
   <head>
     <link href="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet" media="screen">
     <link href="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js" rel="stylesheet" media="screen">
+    <link href="css/glowingbear.css" rel="stylesheet" media="screen">
     <script type="text/javascript" src="js/angular.min.js"></script>
     <script type="text/javascript" src="js/underscore.js"></script>
     <script type="text/javascript" src="js/protocol.js"></script>
@@ -13,6 +14,9 @@
       <div ng-hide="connected">
         <form class="form-horizontal">
           <legend>Connection</legend>
+            <div class="alert alert-danger" ng-show="errorMessage">
+              <strong>Oh no!</strong> We cannot connect!
+            </div>
           <div class="control-group">
             <label class="control-label" for="hostport">Hostport</label>
             <div class="controls">
@@ -45,7 +49,7 @@
         </span>
         <div ng-repeat="bufferline in activeBuffer.lines">
 
-          <span ng-repeat="part in bufferline.message" class="text">
+          <span ng-repeat="part in bufferline.message" class="text {{ part.fg }}">
             {{ part.text }}
           </span>
 
@@ -70,6 +74,6 @@
               </form>
       </div>
     </div>
-<p>Version <a target="_blank" href="https://github.com/cormier/glowing-bear/commit/4743d3d">4743d3d</a><p>
+<p>Version <a target="_blank" href="https://github.com/cormier/glowing-bear/commit/345dc70">345dc70</a><p>
   </body>
 </html>
