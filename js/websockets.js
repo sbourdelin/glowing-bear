@@ -1,4 +1,4 @@
-var weechat = angular.module('weechat', []);
+var weechat = angular.module('weechat', ['localStorage']);
 
 weechat.factory('colors', [function($scope) {
 
@@ -119,7 +119,6 @@ weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', 'imagePlugin', f
 
     var contentForMessage = function(message) {
         
-        console.log('Message: ', message);
         var content = [];
         for (var i = 0; i < plugins.length; i++) {
             var pluginContent = plugins[i].contentForMessage(message);
@@ -133,7 +132,6 @@ weechat.factory('pluginManager', ['youtubePlugin', 'urlPlugin', 'imagePlugin', f
             }
         }
         
-        console.log('Content: ', content);
         return content;
     }
 
@@ -200,31 +198,56 @@ weechat.factory('handlers', ['$rootScope', 'colors', 'pluginManager', function($
         $rootScope.closeBuffer(buffer_pointer);
     }
 
-    var handleBufferLineAdded = function(message) {
-        var buffer_line = {}
-        var prefix = colors.parse(message['objects'][0]['content'][0]['prefix']);
-        var text = colors.parse(message['objects'][0]['content'][0]['message']);
+
+
+    function BufferLine(weechatBufferLine) {
+
+        /*
+         * Parse the text elements from the buffer line added
+         * 
+         */
+        function parseLineAddedTextElements(message) {
+            var prefix = colors.parse(message['objects'][0]['content'][0]['prefix']);
+
+            var buffer = message['objects'][0]['content'][0]['buffer'];
+            text_elements = _.union(prefix, text);
+            text_elements =_.map(text_elements, function(text_element) {
+                if ('fg' in text_element) {
+                    text_element['fg'] = colors.prepareCss(text_element['fg']);
+                }
+                // TODO: parse background as well
+
+                return text_element;
+            });
+            return text_elements;
+        }        
+
+
         var buffer = message['objects'][0]['content'][0]['buffer'];
-        var message = _.union(prefix, text);
-        message =_.map(message, function(message) {
-            if ('fg' in message) {
-                message['fg'] = colors.prepareCss(message['fg']);
-            }
-            return message;
-        });
-        buffer_line['message'] = message;
-
-        if (!_isActiveBuffer(buffer)) {
-            $rootScope.buffers[buffer]['notification'] = true;
-        }
-
+        var timestamp = parseInt(message['objects'][0]['content'][0]['date']) * 1e3;
+        var text = colors.parse(message['objects'][0]['content'][0]['message']);
+        var content = parseLineAddedTextElements(message);
         var additionalContent = pluginManager.contentForMessage(text[0]['text']);
 
-        if (additionalContent) {
-            buffer_line['metadata'] = additionalContent;
+        return {
+            metadata: additionalContent,
+            content: content,
+            timestamp: timestamp,
+            buffer: buffer
         }
 
-        $rootScope.buffers[buffer]['lines'].push(buffer_line);
+    }
+
+    var handleBufferLineAdded = function(message) {
+        var buffer_line = {}
+        
+        message = new BufferLine(message);
+     
+        if (!_isActiveBuffer(message.buffer)) {
+            $rootScope.buffers[message.buffer]['notification'] = true;
+        }
+
+        $rootScope.buffers[message.buffer]['lines'].push(message);
     }
 
     /*
@@ -324,11 +347,8 @@ weechat.factory('connection', ['$rootScope', '$log', 'handlers', 'colors', funct
             // FIXME: does password need to be sent only if protocol is not weechat?
             if (proto == "weechat") {
                 if (password) {
-                    doSend("init compression=off,password=" + password + "\n");
+                    doSend("init compression=off,password=" + password + "\n(bufinfo) hdata buffer:gui_buffers(*) full_name\nsync\n");
                 }
-
-                doSend("(bufinfo) hdata buffer:gui_buffers(*) full_name\n");
-                doSend("sync\n");
             } else {
 
             }
@@ -371,16 +391,17 @@ weechat.factory('connection', ['$rootScope', '$log', 'handlers', 'colors', funct
     }
 }]);
 
-weechat.controller('WeechatCtrl', ['$rootScope', '$scope', 'connection', function ($rootScope, $scope, connection) {
+weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', 'connection', function ($rootScope, $scope, $store, connection) {
     $rootScope.commands = []
 
     $rootScope.buffer = []
     $rootScope.buffers = {}
     $rootScope.activeBuffer = null;
-    $scope.hostport = "localhost:9001"
-    $scope.proto = "weechat"
-    $scope.password = ""
-
+    $store.bind($scope, "hostport", "localhost:9001");
+    $store.bind($scope, "proto", "weechat");
+    $store.bind($scope, "password", "");
+    // TODO checkbox for saving password or not?
+    // $scope.password = "";
 
     $rootScope.closeBuffer = function(buffer_pointer) {
         delete($rootScope.buffers[buffer_pointer]);
